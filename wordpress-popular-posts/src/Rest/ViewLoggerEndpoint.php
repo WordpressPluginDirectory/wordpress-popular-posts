@@ -12,10 +12,11 @@ class ViewLoggerEndpoint extends Endpoint {
      */
     public function register()
     {
-        $version = '1';
+        $version = '2';
         $namespace = 'wordpress-popular-posts/v' . $version;
 
-        register_rest_route($namespace, '/popular-posts', [
+        /** @TODO: This endpoint has been superseeded by /views, please remove */
+        register_rest_route('wordpress-popular-posts/v1', '/popular-posts', [
             [
                 'methods'             => \WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'update_views_count'],
@@ -23,6 +24,52 @@ class ViewLoggerEndpoint extends Endpoint {
                 'args'                => $this->get_tracking_params(),
             ]
         ]);
+
+        register_rest_route($namespace, '/views/(?P<id>[\d]+)', [
+            [
+                'methods'             => \WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_views_count'],
+                'permission_callback' => '__return_true',
+                'args'                => $this->get_views_params(),
+            ]
+        ]);
+
+        register_rest_route($namespace, '/views/(?P<id>[\d]+)', [
+            [
+                'methods'             => \WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'update_views_count'],
+                'permission_callback' => '__return_true',
+                'args'                => $this->get_tracking_params(),
+            ]
+        ]);
+    }
+
+    /**
+     * Returs the views count of a post/page.
+     *
+     * @since   7.0.0
+     *
+     * @param   \WP_REST_Request    $request  Full details about the request.
+     * @return  string                        Views count string.
+     */
+    public function get_views_count($request) {
+        $post_id = $request->get_param('id');
+        $range = in_array( $request->get_param('range'), ['last24hours', 'last7days', 'last30days', 'all', 'custom'] ) ? $request->get_param('range') : 'all';
+        $time_unit = in_array( $request->get_param('time_unit'), ['minute', 'hour', 'day', 'week', 'month'] ) ? $request->get_param('time_unit') : 'hour';
+        $time_quantity = $request->get_param('time_quantity');
+        $include_views_text = 1 == $request->get_param('include_views_text') ? 1 : 0;
+
+        $views_count_shortcode = '[wpp_views_count post_id=' . $post_id . ' include_views_text=' . $include_views_text . ' range="' . $range . '"';
+
+        if ( 'custom' == $range ) {
+            $views_count_shortcode .= ' time_unit="' . $time_unit . '" time_quantity=' . $time_quantity;
+        }
+
+        $views_count_shortcode .= ']';
+
+        $response['text'] = do_shortcode($views_count_shortcode);
+
+        return new \WP_REST_Response( $response, 200 );
     }
 
     /**
@@ -36,7 +83,17 @@ class ViewLoggerEndpoint extends Endpoint {
     public function update_views_count($request) {
         global $wpdb;
 
-        $post_ID = $request->get_param('wpp_id');
+        /** @TODO: Remove this check once the /v1/popular-posts is removed */
+        if ( false !== strpos($request->get_route(), '/v1/popular-posts') ) {
+            $post_ID = $request->get_param('wpp_id');
+            // Throw warning to let developers know that
+            // the /v1/popular-posts endpoint is going away
+            trigger_error('The /wordpress-popular-posts/v1/popular-posts POST endpoint has been deprecated, please POST to /wordpress-popular-posts/v2/views/[ID] instead.', E_USER_WARNING);
+        }
+        else {
+            $post_ID = $request->get_param('id');
+        }
+
         $sampling = $request->get_param('sampling');
         $sampling_rate = $request->get_param('sampling_rate');
 
@@ -235,6 +292,7 @@ class ViewLoggerEndpoint extends Endpoint {
      */
     public function get_tracking_params()
     {
+        /** @TODO: Remove wpp_id key once the /v1/popular-posts is removed */
         return [
             'wpp_id' => [
                 'description'       => __('The post / page ID.'),
@@ -257,6 +315,48 @@ class ViewLoggerEndpoint extends Endpoint {
                 'sanitize_callback' => 'absint',
                 'validate_callback' => 'rest_validate_request_arg',
             ]
+        ];
+    }
+
+    /**
+     * Retrieves the query params for getting post/page/cpt views count.
+     *
+     * @since 7.0.0
+     *
+     * @return array Query parameters for getting post/page/cpt views count.
+     */
+    public function get_views_params()
+    {
+        return [
+            'range' => [
+                'type'              => 'string',
+                'enum'              => ['last24hours', 'last7days', 'last30days', 'all', 'custom'],
+                'default'           => 'all',
+                'sanitize_callback' => 'sanitize_text_field',
+                'validate_callback' => '__return_true'
+            ],
+            'time_unit' => [
+                'type'              => 'string',
+                'enum'              => ['minute', 'hour', 'day', 'week', 'month'],
+                'default'           => 'hour',
+                'sanitize_callback' => 'sanitize_text_field',
+                'validate_callback' => 'rest_validate_request_arg',
+            ],
+            'time_quantity' => [
+                'type'              => 'integer',
+                'default'           => 24,
+                'minimum'           => 1,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => 'rest_validate_request_arg',
+            ],
+            'include_views_text' => [
+                'type'              => 'integer',
+                'default'           => 1,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function($param, $request, $key) {
+                    return is_numeric($param);
+                }
+            ],
         ];
     }
 }
