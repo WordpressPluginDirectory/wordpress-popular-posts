@@ -172,12 +172,14 @@ class Admin {
         if ( 3 != $performance_nag['status'] ) { // 0 = inactive, 1 = active, 2 = remind me later, 3 = dismissed
             global $wpdb;
 
+            //phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
             $views_count = $wpdb->get_var(
                 $wpdb->prepare(
                     "SELECT IFNULL(SUM(pageviews), 0) AS views FROM {$wpdb->prefix}popularpostssummary WHERE view_datetime > DATE_SUB(%s, INTERVAL 1 HOUR);",
                     Helper::now()
                 )
             );
+            //phpcs:enable
 
             // This site is probably a mid/high traffic one,
             // display performance nag
@@ -245,8 +247,10 @@ class Admin {
         // Set table name
         $prefix = $wpdb->prefix . 'popularposts';
 
+        //phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+
         // Update data table structure and indexes
-        $dataFields = $wpdb->get_results("SHOW FIELDS FROM {$prefix}data;"); //phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $prefix is safe to use
+        $dataFields = $wpdb->get_results("SHOW FIELDS FROM {$prefix}data;");
 
         foreach ( $dataFields as $column ) {
             if ( 'day' == $column->Field ) {
@@ -302,6 +306,8 @@ class Admin {
         if ( 'InnoDB' != $storage_engine_summary ) {
             $wpdb->query("ALTER TABLE {$prefix}summary ENGINE=InnoDB;");
         }
+
+        //phpcs:enable
 
         // Update WPP version
         update_option('wpp_ver', WPP_VERSION);
@@ -369,14 +375,16 @@ class Admin {
 
         $args[] = Helper::now();
 
+        //phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $post_type_placeholder is safe to use
         $query = $wpdb->prepare(
             "SELECT SUM(pageviews) AS total 
             FROM `{$wpdb->prefix}popularpostssummary` v LEFT JOIN `{$wpdb->prefix}posts` p ON v.postid = p.ID 
             WHERE p.post_type IN({$post_type_placeholders}) AND p.post_status = 'publish' AND p.post_password = '' AND v.view_datetime > DATE_SUB(%s, INTERVAL 1 HOUR);",
             $args
         );
+        //phpcs:enable
 
-        $total_views = $wpdb->get_var($query); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $query is built and prepared dynamically, see above
+        $total_views = $wpdb->get_var($query); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $query is built and prepared above
         $total_views = (float) $total_views;
 
         $pageviews = sprintf(
@@ -949,7 +957,7 @@ class Admin {
             //error_log($query);
         }
 
-        return $wpdb->get_results($query, OBJECT_K); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- at this point $query has been prepared already
+        return $wpdb->get_results($query, OBJECT_K); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- at this point $query has been prepared already
     }
 
     /**
@@ -1241,7 +1249,7 @@ class Admin {
     {
         global $wpdb;
 
-        $wpp_transients = $wpdb->get_results("SELECT tkey FROM {$wpdb->prefix}popularpoststransients;");
+        $wpp_transients = $wpdb->get_results("SELECT tkey FROM {$wpdb->prefix}popularpoststransients;"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if ( $wpp_transients && is_array($wpp_transients) && ! empty($wpp_transients) ) {
             foreach( $wpp_transients as $wpp_transient ) {
@@ -1279,36 +1287,51 @@ class Admin {
     public function clear_thumbnails()
     {
         $wpp_uploads_dir = $this->thumbnail->get_plugin_uploads_dir();
+        $token = isset($_POST['token']) ? $_POST['token'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- This is a nonce
 
-        if ( is_array($wpp_uploads_dir) && ! empty($wpp_uploads_dir) ) {
-            $token = isset($_POST['token']) ? $_POST['token'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- This is a nonce
-
-            if (
-                current_user_can('edit_published_posts')
-                && wp_verify_nonce($token, 'wpp_nonce_reset_thumbnails')
-            ) {
-                if ( is_dir($wpp_uploads_dir['basedir']) ) {
-                    $files = glob("{$wpp_uploads_dir['basedir']}/*"); // get all related images
-
-                    if ( is_array($files) && ! empty($files) ) {
-                        foreach( $files as $file ){ // iterate files
-                            if ( is_file($file) ) {
-                                @unlink($file); // delete file
-                            }
-                        }
-                        echo 1;
-                    } else {
-                        echo 2;
-                    }
-                } else {
-                    echo 3;
-                }
-            } else {
-                echo 4;
-            }
+        if (
+            current_user_can('edit_published_posts')
+            && wp_verify_nonce($token, 'wpp_nonce_reset_thumbnails')
+        ) {
+            echo $this->delete_thumbnails();
+        } else {
+            echo 4;
         }
 
         wp_die();
+    }
+
+    /**
+     * Deletes WPP thumbnails from the uploads/wordpress-popular-posts folder.
+     *
+     * @since  7.0.0
+     * @return int   1 on success, 2 if no thumbnails were found, 3 if WPP's folder can't be reached
+     */
+    private function delete_thumbnails()
+    {
+        $wpp_uploads_dir = $this->thumbnail->get_plugin_uploads_dir();
+
+        if (
+            is_array($wpp_uploads_dir)
+            && ! empty($wpp_uploads_dir)
+            && is_dir($wpp_uploads_dir['basedir'])
+        ) {
+            $files = glob("{$wpp_uploads_dir['basedir']}/*");
+
+            if ( is_array($files) && ! empty($files) ) {
+                foreach( $files as $file ) {
+                    if ( is_file($file) ) {
+                        @unlink($file); // delete file
+                    }
+                }
+
+                return 1;
+            }
+
+            return 2;
+        }
+
+        return 3;
     }
 
     /**
@@ -1402,11 +1425,15 @@ class Admin {
     {
         global $wpdb;
 
-        if ( $wpdb->get_var($wpdb->prepare("SELECT postid FROM {$wpdb->prefix}popularpostsdata WHERE postid = %d", $post_ID)) ) {
+        $post_ID_exists = $wpdb->get_var($wpdb->prepare("SELECT postid FROM {$wpdb->prefix}popularpostsdata WHERE postid = %d", $post_ID)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+
+        if ( $post_ID_exists ) {
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
             // Delete from data table
             $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}popularpostsdata WHERE postid = %d;", $post_ID));
             // Delete from summary table
             $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}popularpostssummary WHERE postid = %d;", $post_ID));
+            // phpcs:enable
         }
 
         // Delete cached thumbnail(s) as well
@@ -1422,6 +1449,7 @@ class Admin {
     public function purge_data()
     {
         global $wpdb;
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->prefix}popularpostssummary WHERE view_date < DATE_SUB(%s, INTERVAL %d DAY);",
@@ -1429,6 +1457,7 @@ class Admin {
                 $this->config['tools']['log']['expires_after']
             )
         );
+        //phpcs:enable
     }
 
     /**
