@@ -3,9 +3,9 @@ Contributors: hcabrera
 Donate link: https://ko-fi.com/cabrerahector
 Tags: popular, posts, widget, popularity, top
 Requires at least: 5.7
-Tested up to: 6.5.5
+Tested up to: 6.6.2
 Requires PHP: 7.2
-Stable tag: 7.0.1
+Stable tag: 7.1.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,6 +108,18 @@ The FAQ section has been moved [here](https://github.com/cabrerahector/wordpress
 4. Statistics panel.
 
 == Changelog ==
+
+= 7.1.0 =
+
+**If you're using a caching plugin on your website it's highly recommended to clear its cache after installing / updating to this version.**
+
+- Fixes a PHP fatal error that can happen on the block-based Widgets screen when using the "classic" widget (props to andymoonshine!)
+- Fixes an issue where the shortcode didn't add the "current" CSS class to the current post.
+- Fixes a PHP warning that can occur when the HTML output is empty (props to wpfed!)
+- Adds plugin version to wpp.js URL for cache busting.
+- Improves compatibility with WP Rocket.
+
+[Release notes](https://cabrerahector.com/wordpress/wordpress-popular-posts-7-1-improved-wp-rocket-compatibility-plus-various-fixes/)
 
 = 7.0.1 =
 
