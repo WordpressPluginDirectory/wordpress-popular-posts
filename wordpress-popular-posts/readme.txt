@@ -3,9 +3,9 @@ Contributors: hcabrera
 Donate link: https://ko-fi.com/cabrerahector
 Tags: popular, posts, widget, popularity, top
 Requires at least: 5.7
-Tested up to: 6.6.2
+Tested up to: 6.7.1
 Requires PHP: 7.2
-Stable tag: 7.1.0
+Stable tag: 7.2.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -109,6 +109,18 @@ The FAQ section has been moved [here](https://github.com/cabrerahector/wordpress
 
 == Changelog ==
 
+= 7.2.0 =
+
+**If you're using a caching plugin on your website it's highly recommended to clear its cache after installing / updating to this version.**
+
+- Fixes a security issue that allows unintended arbitrary shortcode execution (props to mikemyers and the Wordfence team!)
+- Fixes an issue that would allow the _popularpoststransients table to store more data than intended.
+- Adds ability to hook into WPP's script to perform certain actions before updating the views count of a post/page (see [Release notes](https://cabrerahector.com/wordpress/wordpress-popular-posts-7-2-security-enhancements-ability-to-hook-into-wpp-min-js/#views-tracking-hook) for more details.)
+- Deprecates pid parameter in favor of exclude.
+- Minor code improvements.
+
+[Release notes](https://cabrerahector.com/wordpress/wordpress-popular-posts-7-2-security-enhancements-ability-to-hook-into-wpp-min-js/)
+
 = 7.1.0 =
 
 **If you're using a caching plugin on your website it's highly recommended to clear its cache after installing / updating to this version.**
@@ -149,5 +161,5 @@ The FAQ section has been moved [here](https://github.com/cabrerahector/wordpress
 * Flame graphic by freevector/Vecteezy.com.
 
 == Upgrade Notice ==
-= 6.4.0 =
+= 7.2.0 =
 If you're using a caching plugin on your website it's highly recommended to clear its cache after installing / updating to this version.
