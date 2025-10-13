@@ -95,8 +95,6 @@ class Admin {
      */
     public function hooks()
     {
-        // Upgrade check
-        add_action('init', [$this, 'upgrade_check']);
         // Hook fired when a new blog is activated on WP Multisite
         add_action('wpmu_new_blog', [$this, 'activate_new_site']);
         // Hook fired when a blog is deleted on WP Multisite
@@ -141,16 +139,6 @@ class Admin {
     }
 
     /**
-     * Checks if an upgrade procedure is required.
-     *
-     * @since   2.4.0
-     */
-    public function upgrade_check()
-    {
-        $this->upgrade_site();
-    }
-
-    /**
      * Checks whether a performance tweak may be necessary.
      *
      * @since   5.0.2
@@ -170,10 +158,13 @@ class Admin {
         if ( 3 != $performance_nag['status'] ) { // 0 = inactive, 1 = active, 2 = remind me later, 3 = dismissed
             global $wpdb;
 
+            $summary_table = "{$wpdb->prefix}popularpostssummary";
+
             //phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
             $views_count = $wpdb->get_var(
                 $wpdb->prepare(
-                    "SELECT IFNULL(SUM(pageviews), 0) AS views FROM {$wpdb->prefix}popularpostssummary WHERE view_datetime > DATE_SUB(%s, INTERVAL 1 HOUR);",
+                    "SELECT IFNULL(SUM(pageviews), 0) AS views FROM %i WHERE view_datetime > DATE_SUB(%s, INTERVAL 1 HOUR);",
+                    $summary_table,
                     Helper::now()
                 )
             );
@@ -189,143 +180,6 @@ class Admin {
                 }
             }
         }
-    }
-
-    /**
-     * Upgrades single site.
-     *
-     * @since   4.0.7
-     */
-    private function upgrade_site()
-    {
-        // Get WPP version
-        $wpp_ver = get_option('wpp_ver');
-
-        if ( ! $wpp_ver ) {
-            add_option('wpp_ver', WPP_VERSION);
-        } elseif ( version_compare($wpp_ver, WPP_VERSION, '<') ) {
-            $this->upgrade();
-        }
-    }
-
-    /**
-     * On plugin upgrade, performs a number of actions: update WPP database tables structures (if needed),
-     * run the setup wizard (if needed), and some other checks.
-     *
-     * @since   2.4.0
-     * @access  private
-     * @global  object  $wpdb
-     */
-    private function upgrade()
-    {
-        $now = Helper::now();
-
-        // Keep the upgrade process from running too many times
-        $wpp_update = get_option('wpp_update');
-
-        if ( $wpp_update ) {
-            $from_time = strtotime($wpp_update);
-            $to_time = strtotime($now);
-            $difference_in_minutes = round(abs($to_time - $from_time)/60, 2);
-
-            // Upgrade flag is still valid, abort
-            if ( $difference_in_minutes <= 15 ) {
-                return;
-            }
-
-            // Upgrade flag expired, delete it and continue
-            delete_option('wpp_update');
-        }
-
-        global $wpdb;
-
-        // Upgrade flag
-        add_option('wpp_update', $now);
-
-        // Set table name
-        $prefix = $wpdb->prefix . 'popularposts';
-
-        //phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
-
-        // Update data table structure and indexes
-        $dataFields = $wpdb->get_results("SHOW FIELDS FROM {$prefix}data;");
-
-        foreach ( $dataFields as $column ) {
-            if ( 'day' == $column->Field ) {
-                $wpdb->query("ALTER TABLE {$prefix}data ALTER COLUMN day DROP DEFAULT;");
-            }
-
-            if ( 'last_viewed' == $column->Field ) {
-                $wpdb->query("ALTER TABLE {$prefix}data ALTER COLUMN last_viewed DROP DEFAULT;");
-            }
-        }
-
-        // Update summary table structure and indexes
-        $summaryFields = $wpdb->get_results("SHOW FIELDS FROM {$prefix}summary;");
-
-        foreach ( $summaryFields as $column ) {
-            if ( 'last_viewed' == $column->Field ) {
-                $wpdb->query("ALTER TABLE {$prefix}summary CHANGE last_viewed view_datetime datetime NOT NULL, ADD KEY view_datetime (view_datetime);");
-            }
-
-            if ( 'view_date' == $column->Field ) {
-                $wpdb->query("ALTER TABLE {$prefix}summary ALTER COLUMN view_date DROP DEFAULT;");
-            }
-
-            if ( 'view_datetime' == $column->Field ) {
-                $wpdb->query("ALTER TABLE {$prefix}summary ALTER COLUMN view_datetime DROP DEFAULT;");
-            }
-        }
-
-        $summaryIndexes = $wpdb->get_results("SHOW INDEX FROM {$prefix}summary;");
-
-        foreach( $summaryIndexes as $index ) {
-            if ( 'ID_date' == $index->Key_name ) {
-                $wpdb->query("ALTER TABLE {$prefix}summary DROP INDEX ID_date;");
-            }
-
-            if ( 'last_viewed' == $index->Key_name ) {
-                $wpdb->query("ALTER TABLE {$prefix}summary DROP INDEX last_viewed;");
-            }
-        }
-
-        $transientsIndexes = $wpdb->get_results("SHOW INDEX FROM {$prefix}transients;");
-        $transientsHasTKeyIndex = false;
-
-        foreach( $transientsIndexes as $index ) {
-            if ( 'tkey' == $index->Key_name ) {
-                $transientsHasTKeyIndex = true;
-                break;
-            }
-        }
-
-        if ( ! $transientsHasTKeyIndex ) {
-            $wpdb->query("TRUNCATE TABLE {$prefix}transients;");
-            $wpdb->query("ALTER TABLE {$prefix}transients ADD UNIQUE KEY tkey (tkey);");
-        }
-
-        // Validate the structure of the tables, create missing tables / fields if necessary
-        \WordPressPopularPosts\Activation\Activator::track_new_site();
-
-        // Check storage engine
-        $storage_engine_data = $wpdb->get_var("SELECT `ENGINE` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`='{$wpdb->dbname}' AND `TABLE_NAME`='{$prefix}data';");
-
-        if ( 'InnoDB' != $storage_engine_data ) {
-            $wpdb->query("ALTER TABLE {$prefix}data ENGINE=InnoDB;");
-        }
-
-        $storage_engine_summary = $wpdb->get_var("SELECT `ENGINE` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA`='{$wpdb->dbname}' AND `TABLE_NAME`='{$prefix}summary';");
-
-        if ( 'InnoDB' != $storage_engine_summary ) {
-            $wpdb->query("ALTER TABLE {$prefix}summary ENGINE=InnoDB;");
-        }
-
-        //phpcs:enable
-
-        // Update WPP version
-        update_option('wpp_ver', WPP_VERSION);
-        // Remove upgrade flag
-        delete_option('wpp_update');
     }
 
     /**
@@ -388,12 +242,15 @@ class Admin {
 
         $args[] = Helper::now();
 
+        $posts_table = "{$wpdb->prefix}posts";
+        $summary_table = "{$wpdb->prefix}popularpostssummary";
+
         //phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $post_type_placeholder is safe to use
         $query = $wpdb->prepare(
             "SELECT SUM(pageviews) AS total 
-            FROM `{$wpdb->prefix}popularpostssummary` v LEFT JOIN `{$wpdb->prefix}posts` p ON v.postid = p.ID 
+            FROM %i v LEFT JOIN %i p ON v.postid = p.ID 
             WHERE p.post_type IN({$post_type_placeholders}) AND p.post_status = 'publish' AND p.post_password = '' AND v.view_datetime > DATE_SUB(%s, INTERVAL 1 HOUR);",
-            $args
+            [$summary_table, $posts_table, ...$args]
         );
         //phpcs:enable
 
@@ -609,8 +466,8 @@ class Admin {
     public function add_plugin_admin_menu()
     {
         $this->screen_hook_suffix = add_options_page(
-            'WordPress Popular Posts',
-            'WordPress Popular Posts',
+            'WP Popular Posts',
+            'WP Popular Posts',
             'edit_published_posts',
             'wordpress-popular-posts',
             [$this, 'display_plugin_admin_page']
@@ -641,7 +498,7 @@ class Admin {
                 [
                     'id'        => 'wpp_help_overview',
                     'title'     => __('Overview', 'wordpress-popular-posts'),
-                    'content'   => '<p>' . __("Welcome to WordPress Popular Posts' Dashboard! In this screen you will find statistics on what's popular on your site, tools to further tweak WPP to your needs, and more!", 'wordpress-popular-posts') . '</p>'
+                    'content'   => '<p>' . __("Welcome to WP Popular Posts' Dashboard! In this screen you will find statistics on what's popular on your site, tools to further tweak WPP to your needs, and more!", 'wordpress-popular-posts') . '</p>'
                 ]
             );
             $screen->add_help_tab(
@@ -937,30 +794,34 @@ class Admin {
         // Append dates to arguments list
         array_unshift($args, $start_date, $end_date);
 
+        $posts_table = "{$wpdb->posts}";
+
         if ( $item == 'comments' ) {
+            $comments_table = "{$wpdb->comments}";
+
             //phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $post_type_placeholders is already prepared above
             $query = $wpdb->prepare(
                 "SELECT DATE(`c`.`comment_date_gmt`) AS `c_date`, COUNT(*) AS `comments` 
-                FROM `{$wpdb->comments}` c INNER JOIN `{$wpdb->posts}` p ON `c`.`comment_post_ID` = `p`.`ID`
+                FROM %i c INNER JOIN %i p ON `c`.`comment_post_ID` = `p`.`ID`
                 WHERE (`c`.`comment_date_gmt` BETWEEN %s AND %s) AND `c`.`comment_approved` = '1' AND `p`.`post_type` IN (" . implode(', ', $post_type_placeholders) . ") AND `p`.`post_status` = 'publish' AND `p`.`post_password` = '' 
                 " . ( $this->config['stats']['freshness'] ? ' AND `p`.`post_date` >= %s' : '' ) . '
                 GROUP BY `c_date` ORDER BY `c_date` DESC;',
-                $args
+                [$comments_table, $posts_table, ...$args]
             );
             //phpcs:enable
         } else {
+            $views_table = "{$wpdb->prefix}popularpostssummary";
+
             //phpcs:disable WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $post_type_placeholders is already prepared above
             $query = $wpdb->prepare(
                 "SELECT `v`.`view_date`, SUM(`v`.`pageviews`) AS `pageviews` 
-                FROM `{$wpdb->prefix}popularpostssummary` v INNER JOIN `{$wpdb->posts}` p ON `v`.`postid` = `p`.`ID`
+                FROM %i v INNER JOIN %i p ON `v`.`postid` = `p`.`ID`
                 WHERE (`v`.`view_datetime` BETWEEN %s AND %s) AND `p`.`post_type` IN (" . implode(', ', $post_type_placeholders) . ") AND `p`.`post_status` = 'publish' AND `p`.`post_password` = '' 
                 " . ( $this->config['stats']['freshness'] ? ' AND `p`.`post_date` >= %s' : '' ) . '
                 GROUP BY `v`.`view_date` ORDER BY `v`.`view_date` DESC;',
-                $args
+                [$views_table, $posts_table, ...$args]
             );
             //phpcs:enable
-
-            //error_log($query);
         }
 
         return $wpdb->get_results($query, OBJECT_K); //phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- at this point $query has been prepared already
@@ -1202,8 +1063,9 @@ class Admin {
     private function flush_transients()
     {
         global $wpdb;
+        $transients_table = "{$wpdb->prefix}popularpoststransients";
 
-        $wpp_transients = $wpdb->get_results("SELECT tkey FROM {$wpdb->prefix}popularpoststransients;"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpp_transients = $wpdb->get_results($wpdb->prepare("SELECT tkey FROM %i;", $transients_table)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if ( $wpp_transients && is_array($wpp_transients) && ! empty($wpp_transients) ) {
             foreach( $wpp_transients as $wpp_transient ) {
@@ -1217,7 +1079,7 @@ class Admin {
                 }
             }
 
-            $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}popularpoststransients;");
+            $wpdb->query($wpdb->prepare("TRUNCATE TABLE %i;", $transients_table));
         }
     }
 
@@ -1378,15 +1240,18 @@ class Admin {
     public function purge_post(int $post_ID)
     {
         global $wpdb;
+        $data_table = "{$wpdb->prefix}popularpostsdata";
 
-        $post_ID_exists = $wpdb->get_var($wpdb->prepare("SELECT postid FROM {$wpdb->prefix}popularpostsdata WHERE postid = %d", $post_ID)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $post_ID_exists = $wpdb->get_var($wpdb->prepare("SELECT postid FROM %i WHERE postid = %d", $data_table, $post_ID)); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
         if ( $post_ID_exists ) {
+            $summary_table = "{$wpdb->prefix}popularpostssummary";
+
             // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
             // Delete from data table
-            $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}popularpostsdata WHERE postid = %d;", $post_ID));
+            $wpdb->query($wpdb->prepare("DELETE FROM %i WHERE postid = %d;", $data_table, $post_ID));
             // Delete from summary table
-            $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->prefix}popularpostssummary WHERE postid = %d;", $post_ID));
+            $wpdb->query($wpdb->prepare("DELETE FROM %i WHERE postid = %d;", $summary_table, $post_ID));
             // phpcs:enable
         }
 
@@ -1403,10 +1268,13 @@ class Admin {
     public function purge_data()
     {
         global $wpdb;
+        $summary_table = "{$wpdb->prefix}popularpostssummary";
+
         // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->query(
             $wpdb->prepare(
-                "DELETE FROM {$wpdb->prefix}popularpostssummary WHERE view_date < DATE_SUB(%s, INTERVAL %d DAY);",
+                "DELETE FROM %i WHERE view_date < DATE_SUB(%s, INTERVAL %d DAY);",
+                $summary_table,
                 Helper::curdate(),
                 $this->config['tools']['log']['expires_after']
             )
@@ -1444,9 +1312,17 @@ class Admin {
                 ?>
                 <div class="notice notice-warning">
                     <p>
+                        <strong>WP Popular Posts:</strong> 
                         <?php
                         printf(
-                            __("<strong>WordPress Popular Posts:</strong> It seems your site is popular (great!) You may want to check <a href=\"%s\">these recommendations</a> to make sure your website's performance stays up to par.", 'wordpress-popular-posts'), //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped 
+                            wp_kses(
+                                __('It seems that your site is popular (great!) You may want to check <a href="%s">these recommendations</a> to make sure that its performance stays up to par.', 'wordpress-popular-posts'),
+                                [
+                                    'a' => [
+                                        'href' => []
+                                    ]
+                                ]
+                            ),
                             'https://github.com/cabrerahector/wordpress-popular-posts/wiki/7.-Performance'
                         );
                         ?>
@@ -1457,6 +1333,35 @@ class Admin {
                 </div>
                 <?php
             }
+        }
+
+        $pretty_permalinks_enabled = get_option('permalink_structure');
+
+        if ( ! $pretty_permalinks_enabled ) {
+            ?>
+            <div class="notice notice-warning">
+                <p>
+                    <strong>WP Popular Posts:</strong> 
+                    <?php
+                    printf(
+                        wp_kses(
+                            /* translators: third placeholder corresponds to the I18N version of the "Plain" permalink structure option */
+                            __('It looks like your site is not using <a href="%s">Pretty Permalinks</a>. Please <a href="%s">select a permalink structure</a> other than <em>%s</em> so WP Popular Posts can do its job.', 'wordpress-popular-posts'),
+                            [
+                                'a' => [
+                                    'href' => []
+                                ],
+                                'em' => []
+                            ]
+                        ),
+                        'https://wordpress.org/documentation/article/customize-permalinks/#pretty-permalinks',
+                        esc_url(admin_url('options-permalink.php')),
+                        __('Plain')
+                    );
+                    ?>
+                </p>
+            </div>
+            <?php
         }
     }
 
