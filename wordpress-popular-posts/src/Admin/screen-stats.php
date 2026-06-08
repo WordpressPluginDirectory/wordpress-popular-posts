@@ -26,6 +26,12 @@ if ( 'stats' == $current ) {
                 </label>
 
                 <div class="clear"></div>
+
+                <label for="stats_y_scale">
+                    <input type="checkbox" class="checkbox" <?php echo ($this->config['stats']['y_scale']) ? 'checked="checked"' : ''; ?> id="stats_y_scale" name="stats_y_scale"> <small><?php esc_html_e('Display Y scale', 'wordpress-popular-posts'); ?></small>
+                </label>
+
+                <div class="clear"></div>
                 <br /><br />
 
                 <input type="hidden" name="section" value="stats">
@@ -45,7 +51,7 @@ if ( 'stats' == $current ) {
             </div>
 
             <div class="wpp-lightbox-tab-content active wpp-tabs-panel" id="custom-time-range" role="tabpanel" tabindex="0" aria-labelledby="tab-1">
-                <input type="text" id="stats_range_time_quantity" name="stats_range_time_quantity" value="<?php echo esc_attr($this->config['stats']['time_quantity']); ?>">
+                <input type="number" id="stats_range_time_quantity" name="stats_range_time_quantity" min="1" step="1" value="<?php echo esc_attr($this->config['stats']['time_quantity']); ?>">
 
                 <select id="stats_range_time_unit" name="stats_range_time_unit">
                     <option <?php if ($this->config['stats']['time_unit'] == 'minute') { ?>selected="selected"<?php } ?> value="minute"><?php esc_html_e('Minute(s)', 'wordpress-popular-posts'); ?></option>
@@ -55,7 +61,21 @@ if ( 'stats' == $current ) {
             </div>
 
             <div class="wpp-lightbox-tab-content wpp-tabs-panel" id="custom-date-range" role="tabpanel" tabindex="0" aria-labelledby="tab-2">
-                <input type="text" id="stats_range_date" name="stats_range_date" value="" placeholder="<?php esc_attr_e('Select a date...', 'wordpress-popular-posts'); ?>" />
+                <?php $today = \WordPressPopularPosts\Helper::curdate(); ?>
+
+                <div class="wpp-date-field">
+                    <div class="wpp-date-field-inner">
+                        <label for="stats_range_start_date"><?php esc_html_e('Start date', 'wordpress-popular-posts'); ?></label>
+                        <input type="date" id="stats_range_start_date" name="stats_range_start_date" max="<?php echo esc_attr($today); ?>" value="<?php echo esc_attr($today); ?>" />
+                    </div>
+                </div>
+
+                <div class="wpp-date-field">
+                    <div class="wpp-date-field-inner">
+                        <label for="stats_range_end_date"><?php esc_html_e('End date', 'wordpress-popular-posts'); ?></label>
+                        <input type="date" id="stats_range_end_date" name="stats_range_end_date" max="<?php echo esc_attr($today); ?>" value="<?php echo esc_attr($today); ?>" />
+                    </div>
+                </div>
             </div>
 
             <div class="clear"></div>
@@ -71,8 +91,8 @@ if ( 'stats' == $current ) {
     </div>
 
     <div id="wpp-chart-wrapper">
-        <h4><?php echo wp_kses_post($chart_data['totals']['label_summary']); ?></h4>
-        <h5><?php echo esc_html($chart_data['totals']['label_date_range']); ?></h5>
+        <p><?php echo wp_kses_post($chart_data['totals']['label_summary']); ?></p>
+        <p><?php echo esc_html($chart_data['totals']['label_date_range']); ?></p>
 
         <ul class="wpp-header-nav" id="wpp-time-ranges">
             <li <?php echo ('today' == $this->config['stats']['range']) ? ' class="current"' : ''; ?>>
@@ -92,9 +112,7 @@ if ( 'stats' == $current ) {
             </li>
         </ul>
 
-        <div id="wpp-chart">
-            <p><?php echo sprintf( __('Err... A nice little chart is supposed to be here, instead you are seeing this because your browser is too old. <br /> Please <a href="%s" target="_blank">get a better browser</a>.', 'wordpress-popular-posts'), 'https://browsehappy.com/'); //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
-        </div>
+        <div id="wpp-chart" data-y-scale="<?php echo absint($this->config['stats']['y_scale']); ?>"></div>
     </div>
 
     <div id="wpp-listing" class="wpp-content wpp-tabs">

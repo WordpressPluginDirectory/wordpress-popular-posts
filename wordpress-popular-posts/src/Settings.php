@@ -96,10 +96,10 @@ class Settings {
                 'order_by' => 'views',
                 'limit' => 10,
                 'post_type' => 'post',
-                'freshness' => false
+                'freshness' => false,
+                'y_scale' => false
             ],
             'tools' => [
-                'experimental' => false,
                 'ajax' => true,
                 'css' => true,
                 'link' => [
@@ -115,7 +115,7 @@ class Settings {
                 ],
                 'log' => [
                     'level' => 1,
-                    'limit' => 0,
+                    'limit' => 1,
                     'expires_after' => 180
                 ],
                 'cache' => [
@@ -128,6 +128,10 @@ class Settings {
                 'sampling' => [
                     'active' => false,
                     'rate' => 100
+                ],
+                'views_column' => [
+                    'active' => false,
+                    'post_types' => 'post'
                 ]
             ]
         ]

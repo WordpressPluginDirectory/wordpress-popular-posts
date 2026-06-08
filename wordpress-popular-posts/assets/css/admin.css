@@ -30,6 +30,7 @@
             }
 
 .wpp-wrapper {
+    position: relative;
     float: none;
     clear: both;
     margin: 20px 20px 0 2px;
@@ -90,18 +91,18 @@
 
 .wpp-lightbox {
     display: none;
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 50%;
     z-index: 999;
-    margin: -140px 0 0 -140px;
     padding: 15px;
-    width: 300px;
-    max-height: 280px;
+    width: 100%;
+    max-width: 320px;
     background: #fff;
     -webkit-box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.25);
     box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.25);
     box-sizing: border-box;
+    transform: translate(-50%, -50%);
 }
 
     .wpp-lightbox-tabs {
@@ -113,14 +114,76 @@
 
     .wpp-lightbox form {
         display: block;
+
+        * {
+            box-sizing: border-box;
+        }
     }
 
         .wpp-lightbox form input[type=text] {
             display: block;
             margin: 0 0 15px 0;
             width: 100%;
-            box-sizing: border-box;
         }
+
+        .wpp-lightbox form #custom-time-range.active {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            gap: 8px;
+
+            input,
+            select {
+                border-radius: 5px;
+            }
+        }
+
+        .wpp-lightbox form #custom-date-range.active {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-direction: column;
+            gap: 6px;
+
+            @media (min-width: 640px) {
+                align-items: flex-start;
+                flex-direction: row;
+                gap: 0;
+            }
+        }
+
+            .wpp-lightbox form #custom-date-range .wpp-date-field {
+                position: relative;
+                padding-top: 0.75em;
+            }
+
+                .wpp-lightbox form #custom-date-range .wpp-date-field .wpp-date-field-inner {
+                    padding-top: 0.5em;
+                    border: 1px solid #8c8f94;
+                    border-radius: 5px;
+
+                    &:has(input[type="date"]:focus) {
+                        border-color: #000;
+
+                        & label {
+                            color: #000;
+                        }
+                    }
+                }
+
+                    .wpp-lightbox form #custom-date-range .wpp-date-field .wpp-date-field-inner label {
+                        position: absolute;
+                        top: 0;
+                        left: 8px;
+                        padding: 0 0.25em;
+                        display: inline-block;
+                        cursor: pointer;
+                        background: #fff;
+                    }
+
+                    .wpp-lightbox form #custom-date-range .wpp-date-field .wpp-date-field-inner input[type="date"] {
+                        border: none;
+                        box-shadow: none;
+                    }
 
 .wpp-section-stats {
     position: relative;
@@ -149,44 +212,45 @@
         overflow: hidden;
         display: block;
         padding: 25px 0 0 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
     }
 
-        .wpp-header h2,
-        .wpp-header h3,
-        .wpp-header h4,
-        .wpp-header h5 {
+        .wpp-header h1,
+        .wpp-header p {
             text-align: center;
         }
 
-        .wpp-header h2 {
+        .wpp-header p {
             margin: 0 0 5px 0;
-            font-size: 1.0em;
+            font-size: 13px;
             font-weight: 400;
-            line-height: 1.0em;
+            line-height: 1;
         }
 
-        .wpp-header h3 {
+        .wpp-header h1 {
             margin: 0 0 30px 0;
-            font-size: 3.5em;
+            font-size: 45.5px;
             letter-spacing: -1px;
-            line-height: 1.0em;
+            line-height: 1;
         }
 
-        .wpp-header h4,
-        #wpp-chart-wrapper h4 {
+        #wpp-chart-wrapper p:nth-of-type(1),
+        #wpp-chart-wrapper p:nth-of-type(2) {
+            line-height: 1;
+            text-align: center;
+        }
+
+        #wpp-chart-wrapper p:nth-of-type(1) {
             margin: 0 0 8px 0;
-            font-size: 2.0em;
+            font-size: 26px;
             font-weight: 100;
-            line-height: 1.0em;
             letter-spacing: -2px;
         }
 
-        .wpp-header h5,
-        #wpp-chart-wrapper h5 {
+        #wpp-chart-wrapper p:nth-of-type(2) {
             margin: 0 0 0 0;
-            font-size: 0.9em;
+            font-size: 11.7px;
             font-weight: 300;
-            line-height: 0.9em;
         }
 
         .wpp-header-nav {
@@ -213,11 +277,6 @@
     #wpp-chart-wrapper {
         width: 100%;
     }
-
-        #wpp-chart-wrapper h4,
-        #wpp-chart-wrapper h5 {
-            text-align: center;
-        }
 
         #wpp-chart-wrapper #wpp-chart {
             position: relative;
@@ -262,8 +321,14 @@
 
         #wpp-listing .wpp-tabs-panel {
             overflow: hidden;
-            padding: 2% 30px;
+            padding: 30px;
             width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            #wpp-listing .wpp-tabs-panel {
+                padding: 45px;
+            }
         }
 
             #wpp-listing .wpp-tabs-panel .spinner {
@@ -308,26 +373,6 @@
                         margin: 0 8px 0 0;
                     }
 
-        .wpp-tab-content {
-            display: none;
-            overflow: hidden;
-            padding: 2% 30px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        .wpp-tab-content-active {
-            display: block;
-        }
-
-            .wpp-tab-content .spinner {
-                display: block;
-                visibility: visible;
-                float: none;
-                margin-left: auto;
-                margin-right: auto;
-            }
-
             .popular-posts-list {
                 margin: 0 0 0 0;
                 padding: 0;
@@ -339,7 +384,7 @@
 
                 .popular-posts-list li {
                     counter-increment: wpp-counter;
-                    margin: 0 1% 15px 1%;
+                    margin: 0 0 15px 0;
                     padding: 0 0 10px 0;
                     border-bottom: #f0f0f0 1px solid;
                 }
@@ -352,7 +397,8 @@
 
                 .popular-posts-list li:last-child,
                 .popular-posts-list li:last-child {
-                    margin: 0 1%;
+                    margin: 0;
+                    padding-bottom: 0;
                     border: none;
                 }
 
@@ -404,39 +450,10 @@
         height: auto;
     }
 
-#wpp_params {}
-
-    #wpp_params div {
-    }
-
-        #wpp_params div table {
-            width: 100%;
-            min-width: 800px;
-            background: white;
-        }
-
-            #wpp_params div table tr th {
-                font-size: 1.2em;
-                text-align: left;
-                border-bottom: #dedede 1px solid;
-            }
-
-            #wpp_params div table tr th,
-            #wpp_params div table tr td {
-                padding: 1em;
-            }
-
-            #wpp_params div table tr td {
-                position: static !important;
-                clear: none !important;
-                display: table-cell !important;
-                vertical-align: top;
-            }
-
 .clear {
-    float:none;
-    clear:both;
-    width:100%;
+    float: none;
+    clear: both;
+    width: 100%;
 }
 
 /*
@@ -447,7 +464,7 @@
 @media only screen and (max-width: 768px) {
 
     .wpp-wrapper {
-        margin: 20px 12px 0 2px;
+        margin: 20px 10px 0 2px;
     }
 
         #wpp-listing .wpp-tabbed-nav li a span:last-child {

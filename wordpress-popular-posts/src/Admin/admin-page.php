@@ -27,6 +27,7 @@ if ( isset($_POST['section']) ) {
             $this->config['stats']['limit'] = ( \WordPressPopularPosts\Helper::is_number($_POST['stats_limit']) && $_POST['stats_limit'] > 0 ) ? (int) $_POST['stats_limit'] : 10;
             $this->config['stats']['post_type'] = empty($_POST['stats_type']) ? 'post' : sanitize_text_field($_POST['stats_type']);
             $this->config['stats']['freshness'] = isset($_POST['stats_freshness']);
+            $this->config['stats']['y_scale'] = isset($_POST['stats_y_scale']);
 
             update_option('wpp_settings_config', $this->config);
             echo '<div class="notice notice-success is-dismissible"><p><strong>' . esc_html(__('Settings saved.', 'wordpress-popular-posts')) . '</strong></p></div>';
@@ -36,9 +37,8 @@ if ( isset($_POST['section']) ) {
         $current = 'tools';
 
         if ( isset($_POST['wpp-update-misc-options-token'] ) && wp_verify_nonce($_POST['wpp-update-misc-options-token'], 'wpp-update-misc-options') ) {
-            $this->config['tools']['link']['target'] = sanitize_text_field($_POST['link_target']);
+            $this->config['tools']['link']['target'] = '_blank' === $_POST['link_target'] ? '_blank' : '_self';
             $this->config['tools']['css'] = (bool) $_POST['css'];
-            $this->config['tools']['experimental'] = isset($_POST['experimental_features']);
 
             update_option('wpp_settings_config', $this->config);
             echo '<div class="notice notice-success is-dismissible"><p><strong>' . esc_html(__('Settings saved.', 'wordpress-popular-posts')) . '</strong></p></div>';
@@ -48,8 +48,13 @@ if ( isset($_POST['section']) ) {
         $current = 'tools';
 
         if ( isset($_POST['wpp-update-thumbnail-options-token']) && wp_verify_nonce($_POST['wpp-update-thumbnail-options-token'], 'wpp-update-thumbnail-options') ) {
+            $valid_sources = ['featured', 'first_image', 'first_attachment', 'custom_field'];
+            $valid_formats = ['original', 'avif', 'webp'];
+            $thumb_source = isset($_POST['thumb_source']) && in_array($_POST['thumb_source'], $valid_sources) ? $_POST['thumb_source'] : 'featured';
+            $thumbnail_format = isset($_POST['thumb_format']) && in_array($_POST['thumb_format'], $valid_formats) ? $_POST['thumb_format'] : 'original';
+
             if (
-                $_POST['thumb_source'] == 'custom_field'
+                $thumb_source == 'custom_field'
                 && ( ! isset($_POST['thumb_field']) || empty($_POST['thumb_field']) )
             ) {
                 echo '<div class="notice notice-error"><p>' . esc_html(__('Please provide the name of your custom field.', 'wordpress-popular-posts')) . '</p></div>';
@@ -60,13 +65,11 @@ if ( isset($_POST['section']) ) {
                     $this->flush_transients();
                 }
 
-                $thumbnail_format = sanitize_text_field($_POST['thumb_format']);
-
                 if ( $thumbnail_format !== $this->config['tools']['thumbnail']['format'] ) {
                     $this->delete_thumbnails();
                 }
 
-                $this->config['tools']['thumbnail']['source'] = sanitize_text_field($_POST['thumb_source']);
+                $this->config['tools']['thumbnail']['source'] = $thumb_source;
                 $this->config['tools']['thumbnail']['format'] = $thumbnail_format;
                 $this->config['tools']['thumbnail']['field'] = ( ! empty($_POST['thumb_field']) ) ? sanitize_text_field($_POST['thumb_field']) : 'wpp_thumbnail';
                 $this->config['tools']['thumbnail']['default'] = ( ! empty($_POST['upload_thumb_src']) ) ? $_POST['upload_thumb_src'] : $this->config['tools']['thumbnail']['default'];
@@ -86,6 +89,21 @@ if ( isset($_POST['section']) ) {
             $this->config['tools']['log']['limit'] = (int) $_POST['log_limit'];
             $this->config['tools']['log']['expires_after'] = ( \WordPressPopularPosts\Helper::is_number($_POST['log_expire_time']) && $_POST['log_expire_time'] > 0 ) ? (int) $_POST['log_expire_time'] : 180;
             $this->config['tools']['ajax'] = (bool) $_POST['ajax'];
+            $this->config['tools']['views_column']['active'] = (bool) $_POST['views_column'];
+            $this->config['tools']['views_column']['post_types'] = '';
+
+            if ( is_array($_POST['views_column_post_types']) && ! empty($_POST['views_column_post_types']) ) {
+                $registered_post_types = get_post_types(['public' => true], 'names');
+
+                $post_types = array_values(
+                    array_intersect(
+                        $_POST['views_column_post_types'],
+                        $registered_post_types
+                    )
+                );
+
+                $this->config['tools']['views_column']['post_types'] = $post_types ? implode(',', $post_types) : '';
+            }
 
             // if any of the caching settings was updated, destroy all transients created by the plugin
             if (
@@ -125,8 +143,8 @@ if ( isset($_POST['section']) ) {
 
 <div class="wpp-wrapper wpp-section-<?php echo esc_attr($current); ?>">
     <div class="wpp-header">
-        <h2>WP Popular Posts</h2>
-        <h3><?php echo esc_html($wpp_tabs[$current]); ?></h3>
+        <p>WP Popular Posts</p>
+        <h1><?php echo esc_html($wpp_tabs[$current]); ?></h1>
     </div>
 
     <?php
